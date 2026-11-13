@@ -215,6 +215,9 @@ public final class LunarisBarSettings {
     public boolean isHapticsEnabled() { return enabled("haptics", true); }
     public boolean isCompanionEnabled() { return enabled("companion", true); }
     public boolean isAlwaysVisible() { return enabled("always_visible", false); }
+    public boolean isAlwaysShowOnLockscreen() { return enabled("always_show_lockscreen", true); }
+    public int getIdleStyle() { return integer("idle_style", 1, 0, 2); }
+    public int getLongPressDuration() { return integer("long_press_duration", 400, 200, 1000); }
     public int getMediaBackground() { return integer("media_background", 2, 0, 4); }
     public int getArtworkShape() { return integer("artwork_shape", 4, 0, 31); }
     public int getPlayerIcon() { return integer("player_icon", 0, 0, 2); }

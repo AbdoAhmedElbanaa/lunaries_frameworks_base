@@ -18,27 +18,71 @@ constructor(private val keyguardUpdateMonitor: KeyguardUpdateMonitor) {
 
     var onBiometricUnlock: ((IslandEvent.BiometricUnlock) -> Unit)? = null
 
+    private fun postBiometricEvent(
+        sourceType: BiometricSourceType,
+        status: IslandEvent.BiometricStatus,
+        message: String? = null,
+    ) {
+        val name =
+            when (sourceType) {
+                BiometricSourceType.FINGERPRINT -> "Fingerprint"
+                BiometricSourceType.FACE -> "Face"
+                BiometricSourceType.IRIS -> "Iris"
+                else -> "Biometric"
+            }
+        val event =
+            IslandEvent.BiometricUnlock(
+                sourceType = sourceType.ordinal,
+                sourceName = name,
+                status = status,
+                message = message,
+            )
+        _biometricEvent.value = event
+        onBiometricUnlock?.invoke(event)
+    }
+
     private val callback =
         object : KeyguardUpdateMonitorCallback() {
+            override fun onBiometricRunningStateChanged(
+                running: Boolean,
+                biometricSourceType: BiometricSourceType,
+            ) {
+                if (running && biometricSourceType == BiometricSourceType.FACE) {
+                    postBiometricEvent(biometricSourceType, IslandEvent.BiometricStatus.SCANNING, "Scanning…")
+                } else if (!running && _biometricEvent.value?.status == IslandEvent.BiometricStatus.SCANNING) {
+                    _biometricEvent.value = null
+                }
+            }
+
             override fun onBiometricAuthenticated(
                 userId: Int,
                 biometricSourceType: BiometricSourceType,
                 isStrongBiometric: Boolean,
             ) {
-                val name =
-                    when (biometricSourceType) {
-                        BiometricSourceType.FINGERPRINT -> "Fingerprint"
-                        BiometricSourceType.FACE -> "Face"
-                        BiometricSourceType.IRIS -> "Iris"
-                        else -> "Biometric"
-                    }
-                val event =
-                    IslandEvent.BiometricUnlock(
-                        sourceType = biometricSourceType.ordinal,
-                        sourceName = name,
-                    )
-                _biometricEvent.value = event
-                onBiometricUnlock?.invoke(event)
+                postBiometricEvent(biometricSourceType, IslandEvent.BiometricStatus.SUCCESS, "Unlocked")
+            }
+
+            override fun onBiometricAuthFailed(biometricSourceType: BiometricSourceType) {
+                val msg = if (biometricSourceType == BiometricSourceType.FACE) "Face not recognized" else "Not recognized"
+                postBiometricEvent(biometricSourceType, IslandEvent.BiometricStatus.FAILED, msg)
+            }
+
+            override fun onBiometricError(
+                msgId: Int,
+                errString: String,
+                biometricSourceType: BiometricSourceType,
+            ) {
+                if (msgId != 5 && msgId != 10) {
+                    postBiometricEvent(biometricSourceType, IslandEvent.BiometricStatus.ERROR, errString)
+                }
+            }
+
+            override fun onBiometricHelp(
+                msgId: Int,
+                helpString: String,
+                biometricSourceType: BiometricSourceType,
+            ) {
+                postBiometricEvent(biometricSourceType, IslandEvent.BiometricStatus.HELP, helpString)
             }
         }
 

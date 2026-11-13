@@ -33,6 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FlashlightOn
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
@@ -43,6 +44,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.painterResource
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
@@ -188,7 +190,8 @@ internal fun PillEventIcon(
         is IslandEvent.AppSwitch -> AppSwitchPillIcon(event)
         is IslandEvent.Torch ->
             Icon(Icons.Filled.FlashlightOn, null, tint = tint ?: YellowAccent, modifier = Modifier.size(SizeBadge))
-        is IslandEvent.BiometricUnlock -> BiometricUnlockIcon(tint)
+        is IslandEvent.BiometricUnlock -> BiometricUnlockIcon(event, tint)
+        is IslandEvent.FaceUnlock -> FaceUnlockIcon(event, tint)
         is IslandEvent.KeyguardIndication -> KeyguardIndicationIcon(event, tint)
         is IslandEvent.AospChip -> AospChipPillIcon(event, tint)
     }
@@ -1017,56 +1020,129 @@ private fun AppSwitchPillIcon(event: IslandEvent.AppSwitch, tint: Color? = null)
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun BiometricUnlockIcon(tint: Color? = null) {
-    val color = tint ?: GreenAccent
-    val motionScheme = MaterialTheme.motionScheme
-    var started by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { started = true }
-
-    val sweep by
-        animateFloatAsState(
-            targetValue = if (started) 360f else 0f,
-            animationSpec = motionScheme.defaultSpatialSpec(),
-            label = "bio_sweep",
-        )
-    val checkAlpha by
-        animateFloatAsState(
-            targetValue = if (started) 1f else 0f,
-            animationSpec = tween(250, delayMillis = 500),
-            label = "bio_check",
-        )
-
-    Box(modifier = Modifier.size(18.dp), contentAlignment = Alignment.Center) {
-        Canvas(modifier = Modifier.size(18.dp)) {
-            val inset = 1.dp.toPx()
-            drawArc(
-                color = color,
-                startAngle = -90f,
-                sweepAngle = sweep,
-                useCenter = false,
-                style = Stroke(width = SizeStrokeThin.dp.toPx(), cap = StrokeCap.Round),
-                topLeft = Offset(inset, inset),
-                size = Size(size.width - inset * 2, size.height - inset * 2),
+private fun BiometricUnlockIcon(event: IslandEvent.BiometricUnlock, tint: Color? = null) {
+    val isFace = event.sourceType == 1 || event.sourceName.contains("Face", ignoreCase = true)
+    when (event.status) {
+        IslandEvent.BiometricStatus.SCANNING -> {
+            val color = tint ?: IndigoAccent
+            val infiniteTransition = rememberInfiniteTransition(label = "bio_scanning")
+            val sweep by infiniteTransition.animateFloat(
+                initialValue = 0f,
+                targetValue = 360f,
+                animationSpec = infiniteRepeatable(tween(1000, easing = LinearEasing), RepeatMode.Restart),
+                label = "bio_scanning_sweep",
             )
+            Box(modifier = Modifier.size(18.dp), contentAlignment = Alignment.Center) {
+                Canvas(modifier = Modifier.size(18.dp)) {
+                    val inset = 1.dp.toPx()
+                    drawArc(
+                        color = color,
+                        startAngle = sweep,
+                        sweepAngle = 270f,
+                        useCenter = false,
+                        style = Stroke(width = SizeStrokeThin.dp.toPx(), cap = StrokeCap.Round),
+                        topLeft = Offset(inset, inset),
+                        size = Size(size.width - inset * 2, size.height - inset * 2),
+                    )
+                }
+                Icon(
+                    painter = painterResource(if (isFace) com.android.systemui.res.R.drawable.face_scanning else com.android.systemui.res.R.drawable.ic_fingerprint),
+                    contentDescription = null,
+                    tint = color,
+                    modifier = Modifier.size(11.dp),
+                )
+            }
         }
-
-        if (checkAlpha < 1f) {
-            Icon(
-                Icons.Filled.Lock,
-                null,
-                tint = color.copy(alpha = 1f - checkAlpha),
-                modifier = Modifier.size(10.dp),
-            )
+        IslandEvent.BiometricStatus.FAILED,
+        IslandEvent.BiometricStatus.ERROR -> {
+            val color = tint ?: RedAccent
+            Box(modifier = Modifier.size(18.dp), contentAlignment = Alignment.Center) {
+                Canvas(modifier = Modifier.size(18.dp)) {
+                    val inset = 1.dp.toPx()
+                    drawArc(
+                        color = color,
+                        startAngle = -90f,
+                        sweepAngle = 360f,
+                        useCenter = false,
+                        style = Stroke(width = SizeStrokeThin.dp.toPx(), cap = StrokeCap.Round),
+                        topLeft = Offset(inset, inset),
+                        size = Size(size.width - inset * 2, size.height - inset * 2),
+                    )
+                }
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = null,
+                    tint = color,
+                    modifier = Modifier.size(10.dp),
+                )
+            }
         }
-        if (checkAlpha > 0f) {
-            Icon(
-                Icons.Filled.Check,
-                null,
-                tint = color.copy(alpha = checkAlpha),
-                modifier = Modifier.size(10.dp),
-            )
+        else -> {
+            val color = tint ?: GreenAccent
+            val motionScheme = MaterialTheme.motionScheme
+            var started by remember { mutableStateOf(false) }
+            LaunchedEffect(Unit) { started = true }
+
+            val sweep by
+                animateFloatAsState(
+                    targetValue = if (started) 360f else 0f,
+                    animationSpec = motionScheme.defaultSpatialSpec(),
+                    label = "bio_sweep",
+                )
+            val checkAlpha by
+                animateFloatAsState(
+                    targetValue = if (started) 1f else 0f,
+                    animationSpec = tween(250, delayMillis = 500),
+                    label = "bio_check",
+                )
+
+            Box(modifier = Modifier.size(18.dp), contentAlignment = Alignment.Center) {
+                Canvas(modifier = Modifier.size(18.dp)) {
+                    val inset = 1.dp.toPx()
+                    drawArc(
+                        color = color,
+                        startAngle = -90f,
+                        sweepAngle = sweep,
+                        useCenter = false,
+                        style = Stroke(width = SizeStrokeThin.dp.toPx(), cap = StrokeCap.Round),
+                        topLeft = Offset(inset, inset),
+                        size = Size(size.width - inset * 2, size.height - inset * 2),
+                    )
+                }
+
+                if (checkAlpha < 1f) {
+                    Icon(
+                        painter = painterResource(if (isFace) com.android.systemui.res.R.drawable.face_scanning else com.android.systemui.res.R.drawable.dynamic_island_unlock),
+                        contentDescription = null,
+                        tint = color.copy(alpha = 1f - checkAlpha),
+                        modifier = Modifier.size(10.dp),
+                    )
+                }
+                if (checkAlpha > 0f) {
+                    Icon(
+                        Icons.Filled.Check,
+                        contentDescription = null,
+                        tint = color.copy(alpha = checkAlpha),
+                        modifier = Modifier.size(10.dp),
+                    )
+                }
+            }
         }
     }
+}
+
+@Composable
+private fun FaceUnlockIcon(event: IslandEvent.FaceUnlock, tint: Color? = null) {
+    BiometricUnlockIcon(
+        IslandEvent.BiometricUnlock(
+            sourceType = 1,
+            sourceName = "Face",
+            status = event.status,
+            message = event.message,
+            createdAt = event.createdAt,
+        ),
+        tint,
+    )
 }
 
 @Composable
@@ -1234,7 +1310,40 @@ internal fun PillEventText(
                 else stringResource(R.string.ax_dynamic_bar_on)
             MarqueeLabel(label, overrideColor ?: YellowAccent, modifier)
         }
-        is IslandEvent.BiometricUnlock -> MarqueeLabel(stringResource(R.string.ax_dynamic_bar_unlocked), overrideColor ?: GreenAccent, modifier)
+        is IslandEvent.BiometricUnlock -> {
+            val text = when (event.status) {
+                IslandEvent.BiometricStatus.SCANNING -> "Scanning…"
+                IslandEvent.BiometricStatus.FAILED -> event.message ?: "Not recognized"
+                IslandEvent.BiometricStatus.SUCCESS -> stringResource(R.string.ax_dynamic_bar_unlocked)
+                IslandEvent.BiometricStatus.ERROR,
+                IslandEvent.BiometricStatus.HELP -> event.message ?: "Error"
+            }
+            val color = when (event.status) {
+                IslandEvent.BiometricStatus.SUCCESS -> overrideColor ?: GreenAccent
+                IslandEvent.BiometricStatus.SCANNING -> overrideColor ?: IndigoAccent
+                IslandEvent.BiometricStatus.FAILED,
+                IslandEvent.BiometricStatus.ERROR -> overrideColor ?: RedAccent
+                IslandEvent.BiometricStatus.HELP -> overrideColor ?: OrangeAccent
+            }
+            MarqueeLabel(text, color, modifier)
+        }
+        is IslandEvent.FaceUnlock -> {
+            val text = when (event.status) {
+                IslandEvent.BiometricStatus.SCANNING -> "Scanning…"
+                IslandEvent.BiometricStatus.FAILED -> event.message ?: "Face not recognized"
+                IslandEvent.BiometricStatus.SUCCESS -> stringResource(R.string.ax_dynamic_bar_unlocked)
+                IslandEvent.BiometricStatus.ERROR,
+                IslandEvent.BiometricStatus.HELP -> event.message ?: "Error"
+            }
+            val color = when (event.status) {
+                IslandEvent.BiometricStatus.SUCCESS -> overrideColor ?: GreenAccent
+                IslandEvent.BiometricStatus.SCANNING -> overrideColor ?: IndigoAccent
+                IslandEvent.BiometricStatus.FAILED,
+                IslandEvent.BiometricStatus.ERROR -> overrideColor ?: RedAccent
+                IslandEvent.BiometricStatus.HELP -> overrideColor ?: OrangeAccent
+            }
+            MarqueeLabel(text, color, modifier)
+        }
         is IslandEvent.KeyguardIndication -> MarqueeLabel(event.text, overrideColor ?: IndigoAccent, modifier)
         is IslandEvent.AospChip -> AospChipText(event, modifier, overrideColor)
     }

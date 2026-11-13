@@ -23,6 +23,7 @@ val EVENT_TYPE_IDS: Map<Class<out IslandEvent>, String> =
         IslandEvent.AppSwitch::class.java to "app_switch",
         IslandEvent.Torch::class.java to "torch",
         IslandEvent.BiometricUnlock::class.java to "biometric_unlock",
+        IslandEvent.FaceUnlock::class.java to "face_unlock",
         IslandEvent.AospChip::class.java to "aosp_chip",
     )
 

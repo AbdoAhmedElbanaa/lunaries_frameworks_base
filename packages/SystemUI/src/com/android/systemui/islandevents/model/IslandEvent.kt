@@ -103,12 +103,36 @@ sealed class IslandEvent(open val priority: Int, val id: String) : Comparable<Is
         override val behavior = EventBehavior(autoDismissMs = 2500L, suppressOnDismiss = false)
     }
 
+    enum class BiometricStatus {
+        SCANNING,
+        SUCCESS,
+        FAILED,
+        ERROR,
+        HELP,
+    }
+
     data class BiometricUnlock(
         val sourceType: Int = 0,
         val sourceName: String = "Fingerprint",
+        val status: BiometricStatus = BiometricStatus.SUCCESS,
+        val message: String? = null,
         val createdAt: Long = System.currentTimeMillis(),
     ) : IslandEvent(priority = 80, id = "biometric_unlock") {
-        override val behavior = EventBehavior(autoDismissMs = 2000L, suppressOnDismiss = false)
+        override val behavior = EventBehavior(
+            autoDismissMs = if (status == BiometricStatus.SCANNING) 4000L else 2000L,
+            suppressOnDismiss = false,
+        )
+    }
+
+    data class FaceUnlock(
+        val status: BiometricStatus = BiometricStatus.SUCCESS,
+        val message: String? = null,
+        val createdAt: Long = System.currentTimeMillis(),
+    ) : IslandEvent(priority = 81, id = "face_unlock") {
+        override val behavior = EventBehavior(
+            autoDismissMs = if (status == BiometricStatus.SCANNING) 4000L else 2000L,
+            suppressOnDismiss = false,
+        )
     }
 
     data class Torch(val level: Int = -1, val maxLevel: Int = -1) :

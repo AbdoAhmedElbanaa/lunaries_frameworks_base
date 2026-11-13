@@ -1,7 +1,7 @@
 #ifndef cpu_H
 #define cpu_H
 
-#if defined(__ARM_FEATURE_CRYPTO) && defined(__ARM_FEATURE_AES) && defined(__ARM_NEON)
+#if (defined(__aarch64__) || defined(_M_ARM64)) && defined(__ARM_FEATURE_CRYPTO) && defined(__ARM_FEATURE_AES) && defined(__ARM_NEON)
 #    define HAS_HW_AES
 #elif defined(__AES__) && defined(__AVX__)
 #    define HAS_HW_AES

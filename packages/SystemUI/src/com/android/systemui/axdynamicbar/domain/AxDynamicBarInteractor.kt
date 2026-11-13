@@ -418,6 +418,7 @@ constructor(
                 repository.torch.clear()
             }
             is IslandEvent.BiometricUnlock -> repository.biometric.clear()
+            is IslandEvent.FaceUnlock -> repository.biometric.clear()
             is IslandEvent.KeyguardIndication -> repository.clearIndicationEvent(event.indicationType)
             is IslandEvent.AospChip -> {}
         }

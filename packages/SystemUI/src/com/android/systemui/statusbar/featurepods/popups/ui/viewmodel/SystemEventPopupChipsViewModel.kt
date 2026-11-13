@@ -329,7 +329,7 @@ constructor(
                     if (HOTSPOT in enabled) connectivity.startHotspot()
                     else connectivity.stopHotspot()
                     if (VPN in enabled) connectivity.startVpn() else connectivity.stopVpn()
-                    if (UNLOCK in enabled) biometric.startListening() else biometric.stopListening()
+                    if (UNLOCK in enabled || FACE_UNLOCK in enabled) biometric.startListening() else biometric.stopListening()
                     if (NOW_PLAYING in enabled) smartspace.startListening()
                     else smartspace.stopListening()
 

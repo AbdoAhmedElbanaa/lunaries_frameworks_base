@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.FlashlightOn
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Notifications
@@ -170,9 +171,38 @@ internal fun eventStyleFor(event: IslandEvent): EventStyle = when (event) {
         labelRes = R.string.ax_dynamic_bar_on,
     )
     is IslandEvent.BiometricUnlock -> EventStyle(
-        accent = GreenAccent,
-        icon = Icons.Filled.Fingerprint,
-        labelRes = R.string.ax_dynamic_bar_unlocked,
+        accent = when (event.status) {
+            IslandEvent.BiometricStatus.SCANNING -> BlueAccent
+            IslandEvent.BiometricStatus.SUCCESS -> GreenAccent
+            IslandEvent.BiometricStatus.FAILED,
+            IslandEvent.BiometricStatus.ERROR -> RedAccent
+            IslandEvent.BiometricStatus.HELP -> OrangeAccent
+        },
+        icon = when (event.status) {
+            IslandEvent.BiometricStatus.SUCCESS -> Icons.Filled.CheckCircle
+            else -> Icons.Filled.Fingerprint
+        },
+        labelRes = when (event.status) {
+            IslandEvent.BiometricStatus.SUCCESS -> R.string.ax_dynamic_bar_unlocked
+            else -> R.string.ax_dynamic_bar_biometric
+        },
+    )
+    is IslandEvent.FaceUnlock -> EventStyle(
+        accent = when (event.status) {
+            IslandEvent.BiometricStatus.SCANNING -> BlueAccent
+            IslandEvent.BiometricStatus.SUCCESS -> GreenAccent
+            IslandEvent.BiometricStatus.FAILED,
+            IslandEvent.BiometricStatus.ERROR -> RedAccent
+            IslandEvent.BiometricStatus.HELP -> OrangeAccent
+        },
+        icon = when (event.status) {
+            IslandEvent.BiometricStatus.SUCCESS -> Icons.Filled.CheckCircle
+            else -> Icons.Filled.Lock
+        },
+        labelRes = when (event.status) {
+            IslandEvent.BiometricStatus.SUCCESS -> R.string.ax_dynamic_bar_unlocked
+            else -> R.string.face_unlock_recognizing
+        },
     )
     is IslandEvent.KeyguardIndication -> EventStyle(
         accent = when (event.indicationType) {

@@ -34,6 +34,7 @@ object DynamicIslandFeatureSettings {
     /** Opt-in; independent of every AxDynamicBar setting. */
     const val BATTERY = "status_bar_dynamic_island_battery"
     const val UNLOCK = "status_bar_dynamic_island_unlock"
+    const val FACE_UNLOCK = "status_bar_dynamic_island_face_unlock"
     const val BLUETOOTH = "status_bar_dynamic_island_bluetooth"
     const val CALLS = "status_bar_dynamic_island_calls"
     const val NOTIFICATIONS = "status_bar_dynamic_island_notifications"

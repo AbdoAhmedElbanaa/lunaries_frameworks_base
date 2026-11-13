@@ -190,7 +190,10 @@ class AxDynamicBarSettings @Inject constructor(
 
     fun isKeyguardBiometricUnlockEventsActive(): Boolean =
         _isEnabled.value && _isKeyguardEnabled.value &&
-            "biometric_unlock" !in _disabledEventTypes.value
+            ("biometric_unlock" !in _disabledEventTypes.value || "face_unlock" !in _disabledEventTypes.value)
+
+    fun isFaceUnlockEventsActive(): Boolean =
+        _isEnabled.value && "face_unlock" !in _disabledEventTypes.value
 
     fun isNotificationEventsActive(): Boolean =
         _isEnabled.value && "notification" !in _disabledEventTypes.value

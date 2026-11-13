@@ -72,8 +72,23 @@ internal fun toneFor(event: IslandEvent): IslandTone =
                 RecordingState.SAVED -> IslandTone.POSITIVE
             }
         is IslandEvent.Call,
-        is IslandEvent.Charging,
-        is IslandEvent.BiometricUnlock -> IslandTone.POSITIVE
+        is IslandEvent.Charging -> IslandTone.POSITIVE
+        is IslandEvent.BiometricUnlock ->
+            when (event.status) {
+                IslandEvent.BiometricStatus.SUCCESS -> IslandTone.POSITIVE
+                IslandEvent.BiometricStatus.SCANNING -> IslandTone.ACCENT
+                IslandEvent.BiometricStatus.FAILED,
+                IslandEvent.BiometricStatus.ERROR -> IslandTone.ALERT
+                IslandEvent.BiometricStatus.HELP -> IslandTone.ATTENTION
+            }
+        is IslandEvent.FaceUnlock ->
+            when (event.status) {
+                IslandEvent.BiometricStatus.SUCCESS -> IslandTone.POSITIVE
+                IslandEvent.BiometricStatus.SCANNING -> IslandTone.ACCENT
+                IslandEvent.BiometricStatus.FAILED,
+                IslandEvent.BiometricStatus.ERROR -> IslandTone.ALERT
+                IslandEvent.BiometricStatus.HELP -> IslandTone.ATTENTION
+            }
         is IslandEvent.Sports ->
             when (event.status) {
                 IslandEvent.GameStatus.LIVE,

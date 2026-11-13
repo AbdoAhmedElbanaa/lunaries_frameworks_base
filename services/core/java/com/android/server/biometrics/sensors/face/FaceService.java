@@ -665,10 +665,12 @@ public class FaceService extends SystemService {
 
         private List<ServiceProvider> getSenseProviders() {
             final List<ServiceProvider> providers = new ArrayList<>();
+            final int maxEnrollments = getContext().getResources().getInteger(
+                    com.android.internal.R.integer.config_faceMaxTemplatesPerUser);
             FaceSensorPropertiesInternal props = new FaceSensorPropertiesInternal(
                     SenseProvider.DEVICE_ID,
                     SensorProperties.STRENGTH_WEAK,
-                    1, /** maxEnrollmentsPerUser **/
+                    maxEnrollments, /** maxEnrollmentsPerUser **/
                     new ArrayList(),
                     FaceSensorProperties.TYPE_RGB,
                     false, /** supportsFaceDetection **/

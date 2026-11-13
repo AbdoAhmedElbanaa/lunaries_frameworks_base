@@ -379,7 +379,8 @@ public class BatteryControllerImpl extends BroadcastReceiver implements BatteryC
      * status. This method can be overridden to have a different definition for its subclasses.
      */
     protected boolean isBatteryDefenderMode(int chargingStatus) {
-        return chargingStatus == CHARGING_POLICY_ADAPTIVE_LONGLIFE;
+        return chargingStatus == CHARGING_POLICY_ADAPTIVE_LONGLIFE
+                || (mPluggedIn && !mCharging && !mCharged);
     }
 
     /**

@@ -29,6 +29,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -223,6 +226,7 @@ internal fun ExpandedEventContent(
         is IslandEvent.AppSwitch -> AppHistoryExpanded(event, interactor)
         is IslandEvent.Torch -> TorchExpanded(event, interactor, hapticsViewModelFactory)
         is IslandEvent.BiometricUnlock -> BiometricUnlockExpanded(event)
+        is IslandEvent.FaceUnlock -> FaceUnlockExpanded(event)
         is IslandEvent.KeyguardIndication -> {}
         is IslandEvent.AospChip -> {}
     }
@@ -230,12 +234,44 @@ internal fun ExpandedEventContent(
 
 @Composable
 internal fun BiometricUnlockExpanded(event: IslandEvent.BiometricUnlock) {
+    val tone = toneFor(event)
+    val icon = when (event.status) {
+        IslandEvent.BiometricStatus.SUCCESS -> Icons.Filled.Check
+        IslandEvent.BiometricStatus.FAILED, IslandEvent.BiometricStatus.ERROR -> Icons.Filled.Close
+        else -> Icons.Filled.Fingerprint
+    }
+    val defaultText = when (event.status) {
+        IslandEvent.BiometricStatus.SUCCESS -> stringResource(R.string.ax_dynamic_bar_device_unlocked)
+        else -> stringResource(R.string.ax_dynamic_bar_biometric)
+    }
     ExpandedCardLayout(
-        accentColor = IslandTone.POSITIVE.tint,
-        icon = { Icon(Icons.Filled.Check, null, tint = IslandTone.POSITIVE.tint, modifier = Modifier.size(16.dp)) },
+        accentColor = tone.tint,
+        icon = { Icon(icon, null, tint = tone.tint, modifier = Modifier.size(16.dp)) },
         title = {
-            Text(stringResource(R.string.ax_dynamic_bar_device_unlocked), color = OnCardText, style = MaterialTheme.typography.titleMedium)
+            Text(event.message ?: defaultText, color = OnCardText, style = MaterialTheme.typography.titleMedium)
             Text(event.sourceName, color = SubtleGray, style = MaterialTheme.typography.labelMedium)
+        },
+    )
+}
+
+@Composable
+internal fun FaceUnlockExpanded(event: IslandEvent.FaceUnlock) {
+    val tone = toneFor(event)
+    val icon = when (event.status) {
+        IslandEvent.BiometricStatus.SUCCESS -> Icons.Filled.Check
+        IslandEvent.BiometricStatus.FAILED, IslandEvent.BiometricStatus.ERROR -> Icons.Filled.Close
+        else -> Icons.Filled.Lock
+    }
+    val defaultText = when (event.status) {
+        IslandEvent.BiometricStatus.SUCCESS -> stringResource(R.string.ax_dynamic_bar_device_unlocked)
+        else -> stringResource(R.string.face_unlock_recognizing)
+    }
+    ExpandedCardLayout(
+        accentColor = tone.tint,
+        icon = { Icon(icon, null, tint = tone.tint, modifier = Modifier.size(16.dp)) },
+        title = {
+            Text(event.message ?: defaultText, color = OnCardText, style = MaterialTheme.typography.titleMedium)
+            Text("Face Unlock", color = SubtleGray, style = MaterialTheme.typography.labelMedium)
         },
     )
 }

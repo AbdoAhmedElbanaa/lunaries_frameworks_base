@@ -16,7 +16,9 @@
 
 package com.android.systemui.statusbar.featurepods.popups.ui.compose
 
+import android.app.NotificationManager
 import android.app.StatusBarManager
+import android.app.UiModeManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -27,12 +29,16 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
+import android.os.UserHandle
+import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Log
 import android.view.KeyEvent
+import android.view.WindowManagerGlobal
 import com.android.internal.util.ScreenshotHelper
 import com.android.systemui.Dependency
 import com.android.systemui.plugins.ActivityStarter
+import com.android.systemui.statusbar.CommandQueue
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupContentModel
 import com.android.systemui.statusbar.policy.FlashlightController
@@ -125,6 +131,13 @@ internal fun lunarisBarAction(
                     context
                         .getSystemService(PowerManager::class.java)
                         .goToSleep(SystemClock.uptimeMillis())
+                "power_menu" -> {
+                    runCatching {
+                        WindowManagerGlobal.getWindowManagerService()?.showGlobalActions()
+                    }.onFailure {
+                        Dependency.get(CommandQueue::class.java).showGlobalActionsMenu()
+                    }
+                }
                 "screenshot" -> {
                     model?.hidePopup?.invoke()
                     Handler(Looper.getMainLooper())
@@ -140,6 +153,41 @@ internal fun lunarisBarAction(
                             },
                             300L,
                         )
+                }
+                "split_screen" -> {
+                    runCatching {
+                        Dependency.get(CommandQueue::class.java).toggleSplitScreen()
+                    }
+                }
+                "camera" -> lunarisBarLaunch(context, Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA))
+                "assistant" -> lunarisBarLaunch(context, Intent(Intent.ACTION_VOICE_COMMAND))
+                "calculator" -> key(KeyEvent.KEYCODE_CALCULATOR)
+                "volume_up" -> {
+                    context.getSystemService(AudioManager::class.java)
+                        .adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI)
+                }
+                "volume_down" -> {
+                    context.getSystemService(AudioManager::class.java)
+                        .adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI)
+                }
+                "volume_panel" -> {
+                    context.getSystemService(AudioManager::class.java)
+                        .adjustVolume(AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI)
+                }
+                "ringer_mode" -> {
+                    val audio = context.getSystemService(AudioManager::class.java)
+                    val nextMode = when (audio.ringerMode) {
+                        AudioManager.RINGER_MODE_NORMAL -> AudioManager.RINGER_MODE_VIBRATE
+                        AudioManager.RINGER_MODE_VIBRATE -> AudioManager.RINGER_MODE_SILENT
+                        else -> AudioManager.RINGER_MODE_NORMAL
+                    }
+                    audio.ringerMode = nextMode
+                }
+                "screen_record" -> {
+                    context.sendBroadcast(Intent("com.android.systemui.screenrecord.TOGGLE"))
+                }
+                "clear_notifications" -> {
+                    context.sendBroadcast(Intent("com.android.systemui.action.CLEAR_NOTIFICATIONS"))
                 }
                 "settings" -> lunarisBarLaunch(context, Intent(Settings.ACTION_SETTINGS))
                 "brightness_settings" ->
@@ -174,6 +222,36 @@ internal fun lunarisBarAction(
                         if (current == 0) 1 else 0,
                         android.os.UserHandle.USER_CURRENT,
                     )
+                }
+                "auto_rotate" -> {
+                    val rotation = Settings.System.getIntForUser(
+                        context.contentResolver, Settings.System.ACCELEROMETER_ROTATION, 0, UserHandle.USER_CURRENT
+                    )
+                    Settings.System.putIntForUser(
+                        context.contentResolver, Settings.System.ACCELEROMETER_ROTATION,
+                        if (rotation == 1) 0 else 1, UserHandle.USER_CURRENT
+                    )
+                }
+                "dnd_toggle" -> {
+                    val nm = context.getSystemService(NotificationManager::class.java)
+                    val current = nm.currentInterruptionFilter
+                    val next = if (current == NotificationManager.INTERRUPTION_FILTER_ALL) {
+                        NotificationManager.INTERRUPTION_FILTER_PRIORITY
+                    } else {
+                        NotificationManager.INTERRUPTION_FILTER_ALL
+                    }
+                    nm.setInterruptionFilter(next)
+                }
+                "dark_theme" -> {
+                    val uiMode = context.getSystemService(UiModeManager::class.java)
+                    val currentNight = uiMode.nightMode == UiModeManager.MODE_NIGHT_YES
+                    uiMode.setNightModeActivated(!currentNight)
+                }
+                "airplane_mode" -> {
+                    val current = Settings.Global.getInt(context.contentResolver, Settings.Global.AIRPLANE_MODE_ON, 0)
+                    val next = if (current == 1) 0 else 1
+                    Settings.Global.putInt(context.contentResolver, Settings.Global.AIRPLANE_MODE_ON, next)
+                    context.sendBroadcast(Intent(Intent.ACTION_AIRPLANE_MODE_CHANGED).putExtra("state", next == 1))
                 }
                 else ->
                     when {

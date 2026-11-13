@@ -148,6 +148,7 @@ constructor(
             when (event) {
                 is IslandEvent.Charging -> SystemEventKind.Charging
                 is IslandEvent.BiometricUnlock -> SystemEventKind.Unlock
+                is IslandEvent.FaceUnlock -> SystemEventKind.Unlock
                 is IslandEvent.Bluetooth -> SystemEventKind.Bluetooth
                 is IslandEvent.Hotspot -> SystemEventKind.Hotspot
                 is IslandEvent.Vpn -> SystemEventKind.Vpn
@@ -217,15 +218,21 @@ constructor(
         val (title, text) =
             when (event) {
                 is IslandEvent.Charging -> {
-                    iconRes = R.drawable.dynamic_island_charging
+                    val isProtected = !event.isCharging && event.level < 100
+                    iconRes = if (isProtected) R.drawable.battery_unified_attr_defend else R.drawable.dynamic_island_charging
                     prominentText = "${event.level}%"
                     settings(android.provider.Settings.ACTION_BATTERY_SAVER_SETTINGS)
                     pulse = event.isCharging
                     progress = event.level / 100f
-                    context.getString(
-                        if (event.isWireless) R.string.dynamic_island_event_wireless_charging
-                        else R.string.dynamic_island_event_charging
-                    ) to
+                    val mainTitle = if (isProtected) {
+                        context.getString(R.string.accessibility_battery_level_charging_paused, event.level)
+                    } else {
+                        context.getString(
+                            if (event.isWireless) R.string.dynamic_island_event_wireless_charging
+                            else R.string.dynamic_island_event_charging
+                        )
+                    }
+                    mainTitle to
                         listOfNotNull(
                                 event.timeRemaining,
                                 context
@@ -235,8 +242,40 @@ constructor(
                             .joinToString(" · ")
                 }
                 is IslandEvent.BiometricUnlock -> {
-                    iconRes = R.drawable.dynamic_island_unlock
-                    context.getString(R.string.dynamic_island_event_unlocked) to event.sourceName
+                    val isFace = event.sourceType == 1 || event.sourceName.contains("Face", ignoreCase = true)
+                    iconRes = when (event.status) {
+                        IslandEvent.BiometricStatus.SCANNING -> if (isFace) R.drawable.face_scanning else R.drawable.dynamic_island_unlock
+                        IslandEvent.BiometricStatus.FAILED -> if (isFace) R.drawable.face_not_verified else R.drawable.dynamic_island_unlock
+                        IslandEvent.BiometricStatus.SUCCESS -> if (isFace) R.drawable.face_success else R.drawable.dynamic_island_unlock
+                        IslandEvent.BiometricStatus.ERROR,
+                        IslandEvent.BiometricStatus.HELP -> if (isFace) R.drawable.face_not_verified else R.drawable.dynamic_island_unlock
+                    }
+                    val title = when (event.status) {
+                        IslandEvent.BiometricStatus.SCANNING -> "Scanning…"
+                        IslandEvent.BiometricStatus.FAILED -> if (isFace) "Face not recognized" else "Not recognized"
+                        IslandEvent.BiometricStatus.SUCCESS -> context.getString(R.string.dynamic_island_event_unlocked)
+                        IslandEvent.BiometricStatus.ERROR -> "Error"
+                        IslandEvent.BiometricStatus.HELP -> "Help"
+                    }
+                    val subtitle = event.message ?: event.sourceName
+                    title to subtitle
+                }
+                is IslandEvent.FaceUnlock -> {
+                    iconRes = when (event.status) {
+                        IslandEvent.BiometricStatus.SCANNING -> R.drawable.face_scanning
+                        IslandEvent.BiometricStatus.FAILED -> R.drawable.face_not_verified
+                        IslandEvent.BiometricStatus.SUCCESS -> R.drawable.face_success
+                        IslandEvent.BiometricStatus.ERROR,
+                        IslandEvent.BiometricStatus.HELP -> R.drawable.face_not_verified
+                    }
+                    val title = when (event.status) {
+                        IslandEvent.BiometricStatus.SCANNING -> "Scanning…"
+                        IslandEvent.BiometricStatus.FAILED -> "Face not recognized"
+                        IslandEvent.BiometricStatus.SUCCESS -> context.getString(R.string.dynamic_island_event_unlocked)
+                        IslandEvent.BiometricStatus.ERROR -> "Error"
+                        IslandEvent.BiometricStatus.HELP -> "Help"
+                    }
+                    title to (event.message ?: "Face")
                 }
                 is IslandEvent.Bluetooth -> {
                     prominentText = "${event.batteryLevel}%".takeIf { event.batteryLevel >= 0 }
@@ -515,6 +554,7 @@ constructor(
             when (event) {
                 is IslandEvent.Bluetooth -> Icon.Resource(R.drawable.dynamic_island_bluetooth, null)
                 is IslandEvent.BiometricUnlock,
+                is IslandEvent.FaceUnlock,
                 is IslandEvent.Call,
                 is IslandEvent.Hotspot,
                 is IslandEvent.RingerMode -> Icon.Resource(iconRes, null)
@@ -585,7 +625,8 @@ constructor(
                 when (event) {
                     is IslandEvent.Charging -> "${event.level}%"
                     is IslandEvent.Call,
-                    is IslandEvent.BiometricUnlock -> null
+                    is IslandEvent.BiometricUnlock,
+                    is IslandEvent.FaceUnlock -> null
                     is IslandEvent.Notification ->
                         when {
                             indeterminate -> null
@@ -603,12 +644,16 @@ constructor(
                     is IslandEvent.Call ->
                         event.createdAt.takeIf { event.callType == "Phone:incoming" }
                     is IslandEvent.BiometricUnlock -> event.createdAt
+                    is IslandEvent.FaceUnlock -> event.createdAt
                     is IslandEvent.Notification -> event.createdAt
                     else -> null
                 },
             autoPopupDurationMs =
                 when (event) {
-                    is IslandEvent.BiometricUnlock -> 2_000L
+                    is IslandEvent.BiometricUnlock ->
+                        if (event.status == IslandEvent.BiometricStatus.SCANNING) 4_000L else 2_000L
+                    is IslandEvent.FaceUnlock ->
+                        if (event.status == IslandEvent.BiometricStatus.SCANNING) 4_000L else 2_000L
                     is IslandEvent.Notification -> 4_500L
                     else -> 0L
                 },

@@ -21,6 +21,7 @@ import android.widget.TextClock
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -29,7 +30,8 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
@@ -47,12 +49,17 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlin.math.abs
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
@@ -132,11 +139,12 @@ private fun LunarisBarChipContent(
     val view = LocalView.current
     val media = (viewModel.popupContent as? PopupContentModel.Media)?.model
     val utility = (viewModel.popupContent as? PopupContentModel.Utility)?.card
+    val isHomeIdle = utility?.id == "lunarisbar_home"
     val resting =
-        utility?.id == "lunarisbar_home" ||
-            (utility != null && !utility.enabled("mini_enabled", true) && !companion) ||
-            (media != null && !settings.enabled("media_mini", true) && !companion)
-    val battery = if (utility?.type == "battery") rememberLunarisBarBattery() else null
+        !isHomeIdle &&
+            ((utility != null && !utility.enabled("mini_enabled", true) && !companion) ||
+             (media != null && !settings.enabled("media_mini", true) && !companion))
+    val battery = if (isHomeIdle || utility?.type == "battery") rememberLunarisBarBattery() else null
     val batteryScale =
         (battery?.getIntExtra(BatteryManager.EXTRA_SCALE, 100) ?: 100).coerceAtLeast(1)
     val batteryLevel =
@@ -177,6 +185,8 @@ private fun LunarisBarChipContent(
     val cameraGap = if (companion) 0.dp else cutoutSpec.embeddedGapWidth
     val appear =
         remember(companion) { Animatable(if (companion && !settings.isReducedMotion) 0.3f else 1f) }
+    val pressScaleAnim = remember { Animatable(1f) }
+    val coroutineScope = rememberCoroutineScope()
     LaunchedEffect(companion, settings.isReducedMotion, measuring) {
         if (settings.isReducedMotion || measuring) appear.snapTo(1f)
         else appear.animateTo(1f, spring(dampingRatio = 0.68f, stiffness = 480f))
@@ -331,7 +341,7 @@ private fun LunarisBarChipContent(
                         if (legacy != null) 1f
                         else if (settings.enabled("mini_fade", true)) collapse
                         else if (hideForPopup) 0f else 1f
-                    scaleX = appear.value * (if (legacy != null) 1f else 0.78f + 0.22f * collapse)
+                    scaleX = appear.value * (if (legacy != null) 1f else 0.78f + 0.22f * collapse) * pressScaleAnim.value
                     scaleY = scaleX
                     transformOrigin =
                         TransformOrigin(
@@ -386,21 +396,111 @@ private fun LunarisBarChipContent(
                         else Modifier.defaultMinSize(minHeight = dimensions)
                     )
                     .widthIn(max = 240.dp * widthScale + cameraGap)
-                    .combinedClickable(
-                        onClick = {
-                            perform(
-                                if (companion) "expand" else settings.text("gesture_tap", "expand")
-                            )
-                        },
-                        onDoubleClick =
-                            settings
-                                .text("gesture_double_tap", "none")
-                                .takeUnless { it == "none" || companion }
-                                ?.let { action -> { perform(action) } },
-                        onLongClick =
-                            if (companion) null
-                            else ({ perform(settings.text("gesture_long_press", "open_app")) }),
-                    )
+                    .pointerInput(settings, companion) {
+                        val longPressTimeout = settings.longPressDuration.toLong()
+                        val multiTapTimeout = 280L
+                        var tapCount = 0
+                        var tapJob: kotlinx.coroutines.Job? = null
+
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            var isLongPress = false
+                            var isSwipe = false
+                            val startX = down.position.x
+                            val startY = down.position.y
+
+                            coroutineScope.launch {
+                                pressScaleAnim.animateTo(0.88f, tween(60, easing = FastOutSlowInEasing))
+                            }
+                            if (settings.isHapticsEnabled) {
+                                view.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+                            }
+
+                            val longPressJob = coroutineScope.launch {
+                                delay(longPressTimeout)
+                                if (!isSwipe) {
+                                    isLongPress = true
+                                    if (settings.isHapticsEnabled) {
+                                        view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                                    }
+                                    pressScaleAnim.animateTo(0.82f, tween(60))
+                                    pressScaleAnim.animateTo(0.92f, spring(dampingRatio = 0.5f, stiffness = 600f))
+                                    val action = if (companion) "open_app" else settings.text("gesture_long_press", "open_app")
+                                    if (action != "none") perform(action)
+                                }
+                            }
+
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull() ?: break
+                                if (!change.pressed) {
+                                    break
+                                }
+                                val dx = change.position.x - startX
+                                val dy = change.position.y - startY
+                                val touchSlop = 40f
+                                if (!isSwipe && (abs(dx) > touchSlop || abs(dy) > touchSlop)) {
+                                    isSwipe = true
+                                    longPressJob.cancel()
+                                    if (abs(dx) > abs(dy)) {
+                                        val swipeAction = if (dx > 0) settings.text("gesture_swipe_right", "previous_card")
+                                                          else settings.text("gesture_swipe_left", "next_card")
+                                        if (swipeAction != "none") perform(swipeAction)
+                                    } else {
+                                        val swipeAction = if (dy > 0) settings.text("gesture_swipe_down", "notifications")
+                                                          else settings.text("gesture_swipe_up", "expand")
+                                        if (swipeAction != "none") perform(swipeAction)
+                                    }
+                                }
+                            }
+
+                            longPressJob.cancel()
+
+                            coroutineScope.launch {
+                                pressScaleAnim.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = 650f))
+                            }
+
+                            if (isLongPress || isSwipe) {
+                                tapCount = 0
+                                tapJob?.cancel()
+                                return@awaitEachGesture
+                            }
+
+                            tapCount++
+                            tapJob?.cancel()
+                            val tripleAction = settings.text("gesture_triple_tap", "none")
+                            val doubleAction = settings.text("gesture_double_tap", "none")
+                            val singleAction = if (companion) "expand" else settings.text("gesture_tap", "expand")
+
+                            if (tapCount >= 3 && tripleAction != "none") {
+                                tapCount = 0
+                                coroutineScope.launch {
+                                    pressScaleAnim.animateTo(0.92f, tween(40))
+                                    pressScaleAnim.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
+                                }
+                                perform(tripleAction)
+                            } else if (tapCount == 2 && doubleAction != "none" && tripleAction == "none") {
+                                tapCount = 0
+                                coroutineScope.launch {
+                                    pressScaleAnim.animateTo(0.92f, tween(40))
+                                    pressScaleAnim.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
+                                }
+                                perform(doubleAction)
+                            } else {
+                                tapJob = coroutineScope.launch {
+                                    delay(multiTapTimeout)
+                                    if (tapCount == 2 && doubleAction != "none") {
+                                        pressScaleAnim.animateTo(0.92f, tween(40))
+                                        pressScaleAnim.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
+                                        perform(doubleAction)
+                                    } else if (tapCount >= 1) {
+                                        perform(singleAction)
+                                    }
+                                    tapCount = 0
+                                }
+                            }
+                        }
+                    }
                     .padding(
                         start =
                             if (companion) 0.dp
@@ -423,6 +523,77 @@ private fun LunarisBarChipContent(
                         else settings.integer("camera_width", 25, 0, 120).dp
                     )
                 )
+            } else if (isHomeIdle) {
+                val idleStyle = settings.idleStyle
+                when (idleStyle) {
+                    0 -> {
+                        Box(
+                            Modifier.size(8.dp * scale)
+                                .background(colors.miniContent.copy(alpha = 0.85f), CircleShape)
+                        )
+                    }
+                    1 -> {
+                        AndroidView(
+                            factory = { TextClock(it) },
+                            update = {
+                                it.format12Hour = "h:mm"
+                                it.format24Hour = "HH:mm"
+                                it.setTextColor(colors.miniContent.toArgb())
+                                it.textSize = 12f * scale
+                                it.typeface = android.graphics.Typeface.DEFAULT_BOLD
+                            },
+                        )
+                    }
+                    else -> {
+                        val iconRes = context.resources.getIdentifier(
+                            "ic_settings_lunaris_filled", "drawable", context.packageName
+                        ).takeIf { it != 0 } ?: android.R.drawable.btn_star_big_on
+                        androidx.compose.material3.Icon(
+                            androidx.compose.ui.res.painterResource(iconRes),
+                            contentDescription = null,
+                            modifier = Modifier.size(iconSize).clip(shape),
+                            tint = colors.miniContent,
+                        )
+                    }
+                }
+                if (!companion && alignment == LunarisBarAlignment.CENTER) {
+                    Spacer(Modifier.layoutId(LunarisBarCameraGap).width(cameraGap))
+                }
+                if (!companion) {
+                    when (idleStyle) {
+                        0 -> {
+                            Box(
+                                Modifier.size(8.dp * scale)
+                                    .background(colors.miniContent.copy(alpha = 0.85f), CircleShape)
+                            )
+                        }
+                        1 -> {
+                            androidx.compose.foundation.layout.Row(
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp * scale),
+                            ) {
+                                Text(
+                                    "$batteryLevel%",
+                                    color = colors.miniContent,
+                                    style = MaterialTheme.typography.labelMedium,
+                                )
+                                CircularProgressIndicator(
+                                    progress = { batteryLevel / 100f },
+                                    modifier = Modifier.size(16.dp * scale),
+                                    color = colors.miniContent,
+                                    strokeWidth = 2.5.dp * scale,
+                                )
+                            }
+                        }
+                        else -> {
+                            Text(
+                                "$batteryLevel%",
+                                color = colors.miniContent,
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                        }
+                    }
+                }
             } else {
                 if (utility != null && (companion || utility.type != "battery")) {
                     androidx.compose.material3.Icon(

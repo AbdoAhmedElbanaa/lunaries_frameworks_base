@@ -937,7 +937,26 @@ private fun KeyguardPrimaryText(event: IslandEvent, color: Color, modifier: Modi
         is IslandEvent.Clipboard -> MarqueeText(
             event.preview.ifEmpty { stringResource(R.string.ax_dynamic_bar_copied) }, color, modifier,
         )
-        is IslandEvent.BiometricUnlock -> MarqueeText(stringResource(R.string.ax_dynamic_bar_unlocked), color, modifier)
+        is IslandEvent.BiometricUnlock -> {
+            val text = when (event.status) {
+                IslandEvent.BiometricStatus.SCANNING -> "Scanning…"
+                IslandEvent.BiometricStatus.FAILED -> event.message ?: "Not recognized"
+                IslandEvent.BiometricStatus.SUCCESS -> stringResource(R.string.ax_dynamic_bar_unlocked)
+                IslandEvent.BiometricStatus.ERROR,
+                IslandEvent.BiometricStatus.HELP -> event.message ?: "Error"
+            }
+            MarqueeText(text, color, modifier)
+        }
+        is IslandEvent.FaceUnlock -> {
+            val text = when (event.status) {
+                IslandEvent.BiometricStatus.SCANNING -> "Scanning…"
+                IslandEvent.BiometricStatus.FAILED -> event.message ?: "Face not recognized"
+                IslandEvent.BiometricStatus.SUCCESS -> stringResource(R.string.ax_dynamic_bar_unlocked)
+                IslandEvent.BiometricStatus.ERROR,
+                IslandEvent.BiometricStatus.HELP -> event.message ?: "Error"
+            }
+            MarqueeText(text, color, modifier)
+        }
         is IslandEvent.AppSwitch -> MarqueeText(stringResource(R.string.ax_dynamic_bar_recents), color, modifier)
         is IslandEvent.PromotedOngoing -> MarqueeText(
             event.shortText.ifEmpty { event.title.ifEmpty { event.appName } }, color, modifier,
@@ -1051,6 +1070,7 @@ private fun secondaryTextFor(event: IslandEvent): String? = when (event) {
     }
     is IslandEvent.Call -> event.callerName
     is IslandEvent.BiometricUnlock -> event.sourceName
+    is IslandEvent.FaceUnlock -> "Face"
     is IslandEvent.Notification ->
         event.text
             ?.takeIf { it.isNotBlank() }

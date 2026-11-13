@@ -249,7 +249,13 @@ constructor(
     }
 
     private val visiblePopupChips: List<PopupChipModel.Shown> by derivedStateOf {
-        if (!isDynamicIslandEnabled || (isOnLockscreen && !isLockscreenEnabled) || isShadeVisible) {
+        val settings =
+            lunarisBarState.settings.forScreen(
+                lunarisBarState.screenWidth,
+                lunarisBarState.screenHeight,
+            )
+        val allowOnLockscreen = isLockscreenEnabled || (settings.isAlwaysVisible && settings.isAlwaysShowOnLockscreen)
+        if (!isDynamicIslandEnabled || (isOnLockscreen && !allowOnLockscreen) || isShadeVisible) {
             return@derivedStateOf emptyList()
         }
 
@@ -290,16 +296,12 @@ constructor(
                 } + visibleCandidates)
                 .filterNot(::hiddenByForeground)
                 .distinctBy { it.sourceNotificationKey ?: it.chipId }
-        val settings =
-            lunarisBarState.settings.forScreen(
-                lunarisBarState.screenWidth,
-                lunarisBarState.screenHeight,
-            )
         val utilityCards =
             settings.cards
                 .filter { it.isEnabled && (!isOnLockscreen || it.isAllowedOnLockscreen) }
                 .ifEmpty {
-                    if (settings.isAlwaysVisible && !isOnLockscreen && activeChips.isEmpty()) {
+                    val allowAlways = settings.isAlwaysVisible && (!isOnLockscreen || settings.isAlwaysShowOnLockscreen)
+                    if (allowAlways && activeChips.isEmpty()) {
                         listOf(
                             LunarisBarSettings.Card.create("shortcuts", "LunarisBar")
                                 .with("id", "lunarisbar_home")

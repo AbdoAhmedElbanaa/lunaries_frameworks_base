@@ -6729,6 +6729,36 @@ public final class Settings {
         public static final String CAMERA_FLASH_NOTIFICATION = "camera_flash_notification";
 
         /**
+         * Camera flash notification frequency / pulse rate in Hz (pulses per second).
+         * @hide
+         */
+        public static final String CAMERA_FLASH_NOTIFICATION_RATE = "camera_flash_notification_rate";
+
+        /**
+         * Camera flash notification pulse count per notification event.
+         * @hide
+         */
+        public static final String CAMERA_FLASH_NOTIFICATION_COUNT = "camera_flash_notification_count";
+
+        /**
+         * Camera flash notification repeat burst cycles.
+         * @hide
+         */
+        public static final String CAMERA_FLASH_NOTIFICATION_REPEAT = "camera_flash_notification_repeat";
+
+        /**
+         * Camera flash notification repeat interval between bursts in milliseconds.
+         * @hide
+         */
+        public static final String CAMERA_FLASH_NOTIFICATION_REPEAT_INTERVAL = "camera_flash_notification_repeat_interval";
+
+        /**
+         * Camera flash notification intensity level in percentage (1-100).
+         * @hide
+         */
+        public static final String CAMERA_FLASH_NOTIFICATION_INTENSITY = "camera_flash_notification_intensity";
+
+        /**
          * Setting to enable screen flash notification feature.
          * <ul>
          *     <li> 0 = Off
@@ -8440,6 +8470,11 @@ public final class Settings {
             PRIVATE_SETTINGS.add(TOUCHPAD_ACCELERATION_ENABLED);
             PRIVATE_SETTINGS.add(TOUCHPAD_ENABLED);
             PRIVATE_SETTINGS.add(CAMERA_FLASH_NOTIFICATION);
+            PRIVATE_SETTINGS.add(CAMERA_FLASH_NOTIFICATION_RATE);
+            PRIVATE_SETTINGS.add(CAMERA_FLASH_NOTIFICATION_COUNT);
+            PRIVATE_SETTINGS.add(CAMERA_FLASH_NOTIFICATION_REPEAT);
+            PRIVATE_SETTINGS.add(CAMERA_FLASH_NOTIFICATION_REPEAT_INTERVAL);
+            PRIVATE_SETTINGS.add(CAMERA_FLASH_NOTIFICATION_INTENSITY);
             PRIVATE_SETTINGS.add(SCREEN_FLASH_NOTIFICATION);
             PRIVATE_SETTINGS.add(SCREEN_FLASH_NOTIFICATION_COLOR);
             PRIVATE_SETTINGS.add(DEFAULT_DEVICE_FONT_SCALE);
@@ -16289,6 +16324,48 @@ public final class Settings {
          */
         @Readable
         public static final String STATUS_BAR_SHOW_LYRIC = "status_bar_show_lyric";
+
+        /**
+         * Enable iOS Liquid Glass styling for bottom bars in supported applications.
+         * @hide
+         */
+        @Readable
+        public static final String PENGUIN_GLASS_TAB_BARS = "penguin_glass_tab_bars";
+
+        /**
+         * List of packages excluded from Liquid Glass bottom bars (comma-separated).
+         * @hide
+         */
+        @Readable
+        public static final String PENGUIN_GLASS_TAB_BARS_EXCLUDED = "penguin_glass_tab_bars_excluded";
+
+        /**
+         * List of packages where content floats behind the Liquid Glass bottom bar (comma-separated).
+         * @hide
+         */
+        @Readable
+        public static final String PENGUIN_GLASS_TAB_BARS_FLOAT = "penguin_glass_tab_bars_float";
+
+        /**
+         * Enable iOS Liquid Glass styling for bottom bars (Lunaris alias).
+         * @hide
+         */
+        @Readable
+        public static final String LUNARIS_GLASS_TAB_BARS = "lunaris_glass_tab_bars";
+
+        /**
+         * List of packages excluded from Liquid Glass bottom bars (Lunaris alias).
+         * @hide
+         */
+        @Readable
+        public static final String LUNARIS_GLASS_TAB_BARS_EXCLUDED = "lunaris_glass_tab_bars_excluded";
+
+        /**
+         * List of packages where content floats behind the Liquid Glass bottom bar (Lunaris alias).
+         * @hide
+         */
+        @Readable
+        public static final String LUNARIS_GLASS_TAB_BARS_FLOAT = "lunaris_glass_tab_bars_float";
     }
 
     /**

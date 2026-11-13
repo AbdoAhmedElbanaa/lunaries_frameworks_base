@@ -6,6 +6,7 @@ import com.android.systemui.islandevents.model.IslandEvent
 enum class SystemEventFeature(val settingKey: String, val notificationType: String? = null) {
     BATTERY(DynamicIslandFeatureSettings.BATTERY),
     UNLOCK(DynamicIslandFeatureSettings.UNLOCK),
+    FACE_UNLOCK(DynamicIslandFeatureSettings.FACE_UNLOCK),
     BLUETOOTH(DynamicIslandFeatureSettings.BLUETOOTH),
     CALLS(DynamicIslandFeatureSettings.CALLS, "call"),
     NOTIFICATIONS(DynamicIslandFeatureSettings.NOTIFICATIONS, "notification"),
@@ -20,7 +21,9 @@ enum class SystemEventFeature(val settingKey: String, val notificationType: Stri
     companion object {
         fun forEvent(event: IslandEvent): SystemEventFeature? = when (event) {
             is IslandEvent.Charging -> BATTERY
-            is IslandEvent.BiometricUnlock -> UNLOCK
+            is IslandEvent.BiometricUnlock ->
+                if (event.sourceType == 1) FACE_UNLOCK else UNLOCK
+            is IslandEvent.FaceUnlock -> FACE_UNLOCK
             is IslandEvent.Bluetooth -> BLUETOOTH
             is IslandEvent.Call -> CALLS
             is IslandEvent.Notification -> NOTIFICATIONS

@@ -148,6 +148,27 @@ class FlashNotificationsController {
     @VisibleForTesting
     static final String SETTING_KEY_SCREEN_FLASH_NOTIFICATION_COLOR =
             "screen_flash_notification_color_global";
+    @VisibleForTesting
+    static final String SETTING_KEY_CAMERA_FLASH_NOTIFICATION_RATE =
+            "camera_flash_notification_rate";
+    @VisibleForTesting
+    static final String SETTING_KEY_CAMERA_FLASH_NOTIFICATION_COUNT =
+            "camera_flash_notification_count";
+    @VisibleForTesting
+    static final String SETTING_KEY_CAMERA_FLASH_NOTIFICATION_REPEAT =
+            "camera_flash_notification_repeat";
+    @VisibleForTesting
+    static final String SETTING_KEY_CAMERA_FLASH_NOTIFICATION_REPEAT_INTERVAL =
+            "camera_flash_notification_repeat_interval";
+    @VisibleForTesting
+    static final String SETTING_KEY_CAMERA_FLASH_NOTIFICATION_INTENSITY =
+            "camera_flash_notification_intensity";
+
+    private static final int DEFAULT_FLASH_RATE_HZ = 2;
+    private static final int DEFAULT_FLASH_COUNT = 2;
+    private static final int DEFAULT_FLASH_REPEAT = 1;
+    private static final int DEFAULT_FLASH_REPEAT_INTERVAL_MS = 2000;
+    private static final int DEFAULT_FLASH_INTENSITY = 100;
 
     /**
      * Timeout of the wake lock (5 minutes). It should normally never triggered, the wakelock
@@ -171,6 +192,12 @@ class FlashNotificationsController {
     private boolean mIsCameraOpened = false;
     private CameraManager mCameraManager;
     private String mCameraId = null;
+    private int mMaxTorchLevel = 1;
+    private int mFlashRateHz = DEFAULT_FLASH_RATE_HZ;
+    private int mFlashCount = DEFAULT_FLASH_COUNT;
+    private int mFlashRepeat = DEFAULT_FLASH_REPEAT;
+    private int mFlashRepeatIntervalMs = DEFAULT_FLASH_REPEAT_INTERVAL_MS;
+    private int mFlashIntensity = DEFAULT_FLASH_INTENSITY;
 
     private final CameraManager.TorchCallback mTorchCallback = new CameraManager.TorchCallback() {
         @Override
@@ -280,6 +307,30 @@ class FlashNotificationsController {
         if (mDisplayManager != null) {
             mDisplayManager.registerDisplayListener(displayListener, null);
         }
+
+        updateFlashCustomSettings();
+    }
+
+    private void updateFlashCustomSettings() {
+        mFlashRateHz = Settings.System.getIntForUser(mContext.getContentResolver(),
+                SETTING_KEY_CAMERA_FLASH_NOTIFICATION_RATE, DEFAULT_FLASH_RATE_HZ,
+                UserHandle.USER_CURRENT);
+        mFlashCount = Settings.System.getIntForUser(mContext.getContentResolver(),
+                SETTING_KEY_CAMERA_FLASH_NOTIFICATION_COUNT, DEFAULT_FLASH_COUNT,
+                UserHandle.USER_CURRENT);
+        mFlashRepeat = Settings.System.getIntForUser(mContext.getContentResolver(),
+                SETTING_KEY_CAMERA_FLASH_NOTIFICATION_REPEAT, DEFAULT_FLASH_REPEAT,
+                UserHandle.USER_CURRENT);
+        mFlashRepeatIntervalMs = Settings.System.getIntForUser(mContext.getContentResolver(),
+                SETTING_KEY_CAMERA_FLASH_NOTIFICATION_REPEAT_INTERVAL,
+                DEFAULT_FLASH_REPEAT_INTERVAL_MS,
+                UserHandle.USER_CURRENT);
+        mFlashIntensity = Settings.System.getIntForUser(mContext.getContentResolver(),
+                SETTING_KEY_CAMERA_FLASH_NOTIFICATION_INTENSITY, DEFAULT_FLASH_INTENSITY,
+                UserHandle.USER_CURRENT);
+        if (mFlashIntensity <= 0 || mFlashIntensity > 100) {
+            mFlashIntensity = DEFAULT_FLASH_INTENSITY;
+        }
     }
 
     private static Handler getStartedHandler(String tag) {
@@ -293,7 +344,8 @@ class FlashNotificationsController {
             @FlashNotificationReason int reason, IBinder token) {
         final FlashNotification flashNotification = new FlashNotification(opPkg, TYPE_SEQUENCE,
                 getScreenFlashColorPreference(reason),
-                token, () -> stopFlashNotification(opPkg));
+                token, () -> stopFlashNotification(opPkg),
+                mFlashRateHz, mFlashCount, mFlashRepeat, mFlashRepeatIntervalMs);
 
         if (!flashNotification.tryLinkToDeath()) return false;
 
@@ -308,13 +360,15 @@ class FlashNotificationsController {
 
     boolean startFlashNotificationEvent(String opPkg, int reason, String reasonPkg) {
         requestStartFlashNotification(new FlashNotification(opPkg, TYPE_DEFAULT,
-                getScreenFlashColorPreference(reason, reasonPkg)));
+                getScreenFlashColorPreference(reason, reasonPkg),
+                mFlashRateHz, mFlashCount, mFlashRepeat, mFlashRepeatIntervalMs));
         return true;
     }
 
     private void startFlashNotificationShortPreview() {
         requestStartFlashNotification(new FlashNotification(TAG_PREVIEW, TYPE_DEFAULT,
-                getScreenFlashColorPreference(FLASH_REASON_PREVIEW)));
+                getScreenFlashColorPreference(FLASH_REASON_PREVIEW),
+                mFlashRateHz, mFlashCount, mFlashRepeat, mFlashRepeatIntervalMs));
     }
 
     private void startFlashNotificationLongPreview(@ColorInt int color) {
@@ -396,6 +450,8 @@ class FlashNotificationsController {
             if (flashAvailable != null && lensFacing != null
                     && flashAvailable && lensFacing == CameraCharacteristics.LENS_FACING_BACK) {
                 if (DEBUG) Log.d(LOG_TAG, "Found valid camera, cameraId=" + id);
+                Integer maxLevel = c.get(CameraCharacteristics.FLASH_INFO_STRENGTH_MAXIMUM_LEVEL);
+                mMaxTorchLevel = (maxLevel != null && maxLevel > 1) ? maxLevel : 1;
                 return id;
             }
         }
@@ -655,12 +711,23 @@ class FlashNotificationsController {
         if (DEBUG) Log.d(LOG_TAG, "doCameraFlashNotification: " + on + " mCameraId : " + mCameraId);
         if (mCameraManager != null && mCameraId != null) {
             try {
-                mCameraManager.setTorchMode(mCameraId, on);
+                if (on) {
+                    if (mMaxTorchLevel > 1) {
+                        int intensity = (mFlashIntensity > 0 && mFlashIntensity <= 100)
+                                ? mFlashIntensity : DEFAULT_FLASH_INTENSITY;
+                        int targetLevel = Math.max(1, Math.round(mMaxTorchLevel * (intensity / 100.0f)));
+                        mCameraManager.turnOnTorchWithStrengthLevel(mCameraId, targetLevel);
+                    } else {
+                        mCameraManager.setTorchMode(mCameraId, true);
+                    }
+                } else {
+                    mCameraManager.setTorchMode(mCameraId, false);
+                }
                 mIsTorchTouched = on;
             } catch (CameraAccessException e) {
                 Log.e(LOG_TAG, "Failed to setTorchMode: " + e);
-            } catch (IllegalArgumentException  e) {
-                Log.e(LOG_TAG, "Failed to setTorchMode: " + e);
+            } catch (IllegalArgumentException | UnsupportedOperationException e) {
+                Log.e(LOG_TAG, "Failed to setTorchMode/Strength: " + e);
             }
         } else {
             Log.e(LOG_TAG, "Can not use camera flash notification, please check CameraManager!");
@@ -677,6 +744,9 @@ class FlashNotificationsController {
         @ColorInt
         private final int mColor;
         private int mRepeat;
+        private final int mPulseCount;
+        private final int mRepeatCycles;
+        private final int mRepeatIntervalMs;
         @Nullable
         private final IBinder mToken;
         @Nullable
@@ -685,11 +755,25 @@ class FlashNotificationsController {
 
         private FlashNotification(String tag, @FlashNotificationType int type,
                 @ColorInt int color) {
-            this(tag, type, color, null, null);
+            this(tag, type, color, null, null, DEFAULT_FLASH_RATE_HZ, DEFAULT_FLASH_COUNT,
+                    DEFAULT_FLASH_REPEAT, DEFAULT_FLASH_REPEAT_INTERVAL_MS);
+        }
+
+        private FlashNotification(String tag, @FlashNotificationType int type,
+                @ColorInt int color, IBinder token, IBinder.DeathRecipient deathRecipient) {
+            this(tag, type, color, token, deathRecipient, DEFAULT_FLASH_RATE_HZ, DEFAULT_FLASH_COUNT,
+                    DEFAULT_FLASH_REPEAT, DEFAULT_FLASH_REPEAT_INTERVAL_MS);
+        }
+
+        private FlashNotification(String tag, @FlashNotificationType int type,
+                @ColorInt int color, int rateHz, int pulseCount, int repeatCycles,
+                int repeatIntervalMs) {
+            this(tag, type, color, null, null, rateHz, pulseCount, repeatCycles, repeatIntervalMs);
         }
 
         private FlashNotification(String tag, @FlashNotificationType int type, @ColorInt int color,
-                IBinder token, IBinder.DeathRecipient deathRecipient) {
+                IBinder token, IBinder.DeathRecipient deathRecipient, int rateHz, int pulseCount,
+                int repeatCycles, int repeatIntervalMs) {
             mType = type;
             mTag = tag;
             mColor = color;
@@ -698,22 +782,44 @@ class FlashNotificationsController {
 
             switch (type) {
                 case TYPE_SEQUENCE:
-                    mOnDuration = TYPE_SEQUENCE_ON_MS;
-                    mOffDuration = TYPE_SEQUENCE_OFF_MS;
-                    mRepeat = 0; // indefinite
+                    if (rateHz > 0) {
+                        int periodMs = 1000 / rateHz;
+                        mOnDuration = Math.max(30, periodMs / 2);
+                        mOffDuration = Math.max(30, periodMs - mOnDuration);
+                    } else {
+                        mOnDuration = TYPE_SEQUENCE_ON_MS;
+                        mOffDuration = TYPE_SEQUENCE_OFF_MS;
+                    }
+                    mPulseCount = 1;
+                    mRepeatCycles = -1; // indefinite
+                    mRepeatIntervalMs = 0;
+                    mRepeat = 0;
                     mForceStartScreenFlash = false;
                     break;
                 case TYPE_LONG_PREVIEW:
                     mOnDuration = TYPE_LONG_PREVIEW_ON_MS;
                     mOffDuration = TYPE_LONG_PREVIEW_OFF_MS;
+                    mPulseCount = 1;
+                    mRepeatCycles = 1;
+                    mRepeatIntervalMs = 0;
                     mRepeat = 1;
                     mForceStartScreenFlash = true;
                     break;
                 case TYPE_DEFAULT:
                 default:
-                    mOnDuration = TYPE_DEFAULT_ON_MS;
-                    mOffDuration = TYPE_DEFAULT_OFF_MS;
-                    mRepeat = 2;
+                    if (rateHz > 0) {
+                        int periodMs = 1000 / rateHz;
+                        mOnDuration = Math.max(30, periodMs / 2);
+                        mOffDuration = Math.max(30, periodMs - mOnDuration);
+                    } else {
+                        mOnDuration = TYPE_DEFAULT_ON_MS;
+                        mOffDuration = TYPE_DEFAULT_OFF_MS;
+                    }
+                    mPulseCount = pulseCount > 0 ? pulseCount : DEFAULT_FLASH_COUNT;
+                    mRepeatCycles = repeatCycles;
+                    mRepeatIntervalMs = repeatIntervalMs > 0
+                            ? repeatIntervalMs : DEFAULT_FLASH_REPEAT_INTERVAL_MS;
+                    mRepeat = mPulseCount;
                     mForceStartScreenFlash = false;
                     break;
             }
@@ -795,27 +901,38 @@ class FlashNotificationsController {
 
         private void startFlashNotification() {
             synchronized (this) {
+                int cycles = mFlashNotification.mRepeatCycles;
                 while (!mForceStop) {
-                    if (mFlashNotification.mType != TYPE_SEQUENCE
-                            && mFlashNotification.mRepeat >= 0) {
-                        if (mFlashNotification.mRepeat-- == 0) {
+                    for (int i = 0; i < mFlashNotification.mPulseCount && !mForceStop; i++) {
+                        if (mShouldDoScreenFlash) {
+                            doScreenFlashNotificationOn(mColor,
+                                    mFlashNotification.mForceStartScreenFlash);
+                        }
+                        if (mShouldDoCameraFlash) {
+                            doCameraFlashNotificationOn();
+                        }
+                        delay(mFlashNotification.mOnDuration);
+                        doScreenFlashNotificationOff();
+                        doCameraFlashNotificationOff();
+                        if (mForceStop) {
                             break;
                         }
+                        if (i < mFlashNotification.mPulseCount - 1) {
+                            delay(mFlashNotification.mOffDuration);
+                        }
                     }
-                    if (mShouldDoScreenFlash) {
-                        doScreenFlashNotificationOn(mColor,
-                                mFlashNotification.mForceStartScreenFlash);
-                    }
-                    if (mShouldDoCameraFlash) {
-                        doCameraFlashNotificationOn();
-                    }
-                    delay(mFlashNotification.mOnDuration);
-                    doScreenFlashNotificationOff();
-                    doCameraFlashNotificationOff();
                     if (mForceStop) {
                         break;
                     }
-                    delay(mFlashNotification.mOffDuration);
+                    if (cycles > 1) {
+                        cycles--;
+                        delay(mFlashNotification.mRepeatIntervalMs);
+                    } else if (cycles == -1) {
+                        delay(mFlashNotification.mRepeatIntervalMs > 0
+                                ? mFlashNotification.mRepeatIntervalMs : mFlashNotification.mOffDuration);
+                    } else {
+                        break;
+                    }
                 }
             }
         }
@@ -857,6 +974,7 @@ class FlashNotificationsController {
                     return;
                 }
 
+                updateFlashCustomSettings();
                 mIsCameraFlashNotificationEnabled = Settings.System.getIntForUser(
                         mContext.getContentResolver(), SETTING_KEY_CAMERA_FLASH_NOTIFICATION, 0,
                         UserHandle.USER_CURRENT) != 0;
@@ -901,6 +1019,16 @@ class FlashNotificationsController {
                 SETTING_KEY_CAMERA_FLASH_NOTIFICATION);
         private final Uri mScreenFlashNotificationUri = Settings.System.getUriFor(
                 SETTING_KEY_SCREEN_FLASH_NOTIFICATION);
+        private final Uri mFlashRateUri = Settings.System.getUriFor(
+                SETTING_KEY_CAMERA_FLASH_NOTIFICATION_RATE);
+        private final Uri mFlashCountUri = Settings.System.getUriFor(
+                SETTING_KEY_CAMERA_FLASH_NOTIFICATION_COUNT);
+        private final Uri mFlashRepeatUri = Settings.System.getUriFor(
+                SETTING_KEY_CAMERA_FLASH_NOTIFICATION_REPEAT);
+        private final Uri mFlashRepeatIntervalUri = Settings.System.getUriFor(
+                SETTING_KEY_CAMERA_FLASH_NOTIFICATION_REPEAT_INTERVAL);
+        private final Uri mFlashIntensityUri = Settings.System.getUriFor(
+                SETTING_KEY_CAMERA_FLASH_NOTIFICATION_INTENSITY);
 
         FlashContentObserver(Handler handler) {
             super(handler);
@@ -910,6 +1038,16 @@ class FlashNotificationsController {
             contentResolver.registerContentObserver(mCameraFlashNotificationUri, false, this,
                     UserHandle.USER_ALL);
             contentResolver.registerContentObserver(mScreenFlashNotificationUri, false, this,
+                    UserHandle.USER_ALL);
+            contentResolver.registerContentObserver(mFlashRateUri, false, this,
+                    UserHandle.USER_ALL);
+            contentResolver.registerContentObserver(mFlashCountUri, false, this,
+                    UserHandle.USER_ALL);
+            contentResolver.registerContentObserver(mFlashRepeatUri, false, this,
+                    UserHandle.USER_ALL);
+            contentResolver.registerContentObserver(mFlashRepeatIntervalUri, false, this,
+                    UserHandle.USER_ALL);
+            contentResolver.registerContentObserver(mFlashIntensityUri, false, this,
                     UserHandle.USER_ALL);
         }
 
@@ -931,6 +1069,12 @@ class FlashNotificationsController {
                 mIsScreenFlashNotificationEnabled = Settings.System.getIntForUser(
                         mContext.getContentResolver(), SETTING_KEY_SCREEN_FLASH_NOTIFICATION, 0,
                         UserHandle.USER_CURRENT) != 0;
+            } else if (mFlashRateUri.equals(uri)
+                    || mFlashCountUri.equals(uri)
+                    || mFlashRepeatUri.equals(uri)
+                    || mFlashRepeatIntervalUri.equals(uri)
+                    || mFlashIntensityUri.equals(uri)) {
+                updateFlashCustomSettings();
             }
         }
     }
